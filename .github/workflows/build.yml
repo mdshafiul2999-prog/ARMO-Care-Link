@@ -1,0 +1,51 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Create Flutter project
+        run: |
+          flutter create --platforms=android --project-name armo_care_link /tmp/app
+          mkdir -p /tmp/app/assets
+          cp main.dart /tmp/app/lib/main.dart
+          cp pubspec.yaml /tmp/app/pubspec.yaml
+          cp app_icon.png logo.png /tmp/app/assets/
+      - name: Patch Android manifest
+        run: |
+          cd /tmp/app
+          python3 - <<'PY'
+          import re
+          p = "android/app/src/main/AndroidManifest.xml"
+          t = open(p).read()
+          q = ('<uses-permission android:name="android.permission.INTERNET"/>'
+               '<queries>'
+               '<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>'
+               '<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="http"/></intent>'
+               '<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="tel"/></intent>'
+               '<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="mailto"/></intent>'
+               '</queries>')
+          t = t.replace("<application", q + "<application", 1)
+          t = re.sub(r'android:label="[^"]*"', 'android:label="ARMO Care Link"', t, count=1)
+          open(p, "w").write(t)
+          PY
+      - name: Build
+        run: |
+          cd /tmp/app
+          flutter pub get
+          dart run flutter_launcher_icons
+          flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ARMO-Care-Link-APK
+          path: /tmp/app/build/app/outputs/flutter-apk/app-release.apk
